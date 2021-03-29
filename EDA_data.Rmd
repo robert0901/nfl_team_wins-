@@ -1,0 +1,132 @@
+---
+title: "EDA Data"
+author: "Robert Ramirez"
+date: "3/20/2021"
+output:
+   html_document:
+      code_folding: "show"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = F, message = F)
+```
+
+```{r Load Libraries}
+library(tidyverse)
+library(knitr)
+library(kableExtra)
+library(ggrepel)
+#read in data
+d = read.csv("final_data.csv")# Next time remove row names when writing CSV
+```
+# Quick Intro
+The main objectives behind this little project is to get used to working with RMarkdown, GIT, multivariable regression, nflfastR package, and the overall data science project building phase. I cleaned and accessed the data for this project in a separate R script called data_collecting_cleaning.R. I followed closely to the variables used in the book call {Mathletics](http://stavochka.com/files/Mathletics.pdf) in the *WHAT MAKES NFL TEAMS WIN?* chapter. I will point out that the authors ran this similar model with data from 2003 to 2006. In my model, I used data from 2018 to 2020. This RMarkdown has some Exploratory Data Analysis but mostly related to regression. 
+
+Variables     | 
+------------- | -------------
+PY_A          | Passing Yard per Attempt
+DPY_A         | Defense-Passing Yards per Attempt
+RY_A          | Rushing Yards per Attempt
+DRY_A         | Defense-Rushing Yards per Attempt  
+TO            | Turnovers Committed on Offense 
+DTO           | Defensive Turnovers
+RET_TD        | Return TDs by Opponent(includes TDs scored on fumbles, interceptions, kickoffs, and punts)  
+
+## Quicklook of the Data
+***
+
+```{r}
+summary(d) %>% kbl() %>% kable_classic(full_width=F)
+```
+## Distrubtion
+***
+```{r}
+d %>% select(-c(X,SEASON,TEAM)) %>%
+  pivot_longer(cols = everything()) %>% 
+ggplot(aes(value)) +
+    geom_histogram(bins = 10)+
+  facet_wrap(~name, scales = 'free_x')
+```
+<br>
+<br>
+
+### Checking the distributions
+Looks to have a close normal distribution. RET_TD may be slightly right-tailed which is understandable.
+
+<br>
+
+## Quick Pivot Tables
+
+***
+
+### Offensive Turnovers
+```{r}
+pivot_wider(data = d,id_cols = TEAM,names_from = SEASON,values_from = TO) %>% mutate(sum = rowSums(across(where(is.numeric))), mean=rowMeans(across(c("2018","2019","2020"))),across(.cols = mean,.fns = round,1)) %>% arrange(-sum) 
+```
+<br>
+**Just a couple of quick notes on this.**
+Tampa Bay gets skewed toward a higher sum of turnovers the last three years because of the Jameis Winston effect. He threw for 30 interceptions in 2019 [Jameis Winston](https://www.youtube.com/watch?v=DhfpQcL1ETc).When Tom Brady took over, the offense produced way less turnovers. In 2018, the 49ers went through a carousel of Qbs when Jimmy Garoppolo went down which might have lead to the large amount of turnovers. Be interesting to come back to this to split these to have kept interceptions and fumbles.
+
+<br>
+
+Aaron Rodgers is extra careful with the ball hence why Green Bay is at last for turnovers.
+
+<br>
+
+### Returned Touchdowns
+```{r}
+pivot_wider(data = d,id_cols = TEAM,names_from = SEASON,values_from = RET_TD)%>% mutate(sum = rowSums(across(where(is.numeric)))) %>% arrange(-sum)
+```
+<br>
+**Just a point here.** New England had a historic season in 2019 on defense and special teams. Nine returned touchdowns which helped a lot of fantasy players (and hurt other players). To further look into this, let's look at defensive turnovers. If I remember correctly, Pittsburgh also had a great defense that year.
+
+<br>
+
+### Defensive Turnovers
+```{r}
+pivot_wider(data = d,id_cols = TEAM,names_from = SEASON,values_from = DTO) %>% mutate(sum = rowSums(across(where(is.numeric))),mean=rowMeans(across(c("2018","2019","2020"))), across(.cols = mean,.fns = round,1)) %>% arrange(-sum)
+```
+<br>
+So here, both Pittsburgh and New England had a large amount of turnovers in 2019.
+
+<br>
+
+<br>
+
+## Correlation 
+
+***
+
+<br>
+With no categorical variables, just going to go ahead and take a quick look at the correlation of my continuous variables. Just making those quick pivot tables give me a few more ideas for a later projects but I am going to stick to running the regression model.
+
+<br>
+
+### Independant Variable Pair Plots 
+
+```{r}
+library(GGally)
+ggpairs(d[,5:11],)
+```
+
+<br>
+
+There isn't much correlation between variables. The strongest one is between Defensive Turnovers(DTO) and Defensive Pass Yards per Attempt(DPY_A) at -0.410 which is still below .50 absolute value. Something to keep in mind when running this model.
+
+## Linear Regression 
+
+***
+```{r}
+fit <- lm(MARGIN~PY_A+ DPY_A+RY_A+DRY_A+TO+DTO+RET_TD, data = d)
+summary(fit)
+```
+
+## Takeaways
+
+Based off of the results. Our model explains 84 percent of the variability. In our residuals, we have a Median of -2.702 which is relatively close to 0. The Max and Min are closely similar as well.
+
+These results are closely similar to the model ran in Mathletics except for the significance of Returned Touchdowns (RET_TD). In this model, it is not as significant as in their model. Their P Value is 0.014520952 as opposed to 0.10087.
+The difference here could possibly be attributed to rule changes regarding kick-off returns. During their study, there may have been more kick-offs returned than there are today.
+
+But on that note something that puzzles me is that the league has gone to a more pass first opposed to running. So wouldn't there be more interceptions returned for touchdowns in recent years? So to me that may still be somewhat significant. Turnovers on both sides of the ball are weighed about the same which is understandable that a team win the turnover battle. But it appears that for this model offensive turnovers (TO) are much more significant.
+I think I'd like to explore this a bit more moving forward.
